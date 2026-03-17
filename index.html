@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IoT Chess Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <h1>IoT Chess Dashboard</h1>
+
+  <div id="root">
+    <div id="board-wrap">
+      <div style="display:flex; gap:2px;">
+        <div id="rank-labels" class="coord-rank"></div>
+        <div id="board"></div>
+      </div>
+      <div id="file-labels" class="coord-row" style="padding-left:22px;"></div>
+    </div>
+
+    <div id="panel">
+      <div class="panel-card">
+        <div class="panel-label">Device JSON input</div>
+        <textarea id="json-in" placeholder='{"e2":"wP","e4":""} or FEN string'></textarea>
+        <div id="json-err"></div>
+        <div class="btn-row">
+          <button class="primary" onclick="applyJson()">Apply</button>
+          <button onclick="loadExample()">Example move</button>
+          <button onclick="resetBoard()">Reset</button>
+        </div>
+        <div id="fen-out"></div>
+      </div>
+
+      <div class="panel-card">
+        <div class="panel-label">Game status</div>
+        <span id="status-badge">—</span>
+      </div>
+
+      <div class="panel-card">
+        <div class="panel-label">Analysis</div>
+        <div id="analysis-box"><span style="color:var(--color-text-tertiary)">Apply a position to analyse</span></div>
+      </div>
+
+      <div class="panel-card">
+        <div class="panel-label">Move log</div>
+        <div id="move-log"><span style="color:var(--color-text-tertiary)">No moves yet</span></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
