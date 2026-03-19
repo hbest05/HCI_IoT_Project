@@ -20,6 +20,22 @@ let inCheck = null;
 let currentTurn = 'w';
 let moveCount = 1;
 let exampleStep = 0;
+let capturedByWhite = []; // black pieces white has taken
+let capturedByBlack = []; // white pieces black has taken
+
+const PIECE_ORDER = ['Q','R','B','N','P'];
+
+function updateCaptures() {
+  function render(pieces, elId) {
+    const el = document.getElementById(elId);
+    el.innerHTML = [...pieces]
+      .sort((a, b) => PIECE_ORDER.indexOf(a[1]) - PIECE_ORDER.indexOf(b[1]))
+      .map(p => `<span class="${p[0] === 'w' ? 'cap-white' : 'cap-black'}">${PIECES[p]}</span>`)
+      .join('');
+  }
+  render(capturedByBlack, 'captures-by-black'); // white pieces lost → shown near black's side (top)
+  render(capturedByWhite, 'captures-by-white'); // black pieces lost → shown near white's side (bottom)
+}
 
 // --- FEN helpers ---
 
@@ -256,6 +272,12 @@ function applyJson() {
     if (gained.length === 1 && lost.length === 1) {
       detectedFrom = lost[0];
       detectedTo   = gained[0][0];
+      const captured = oldBoard[detectedTo];
+      if (captured) {
+        if (captured[0] === 'b') capturedByWhite.push(captured);
+        else capturedByBlack.push(captured);
+        updateCaptures();
+      }
     }
 
     boardState = merged;
@@ -298,6 +320,8 @@ function resetBoard() {
   boardState = fenToBoard(START_FEN);
   lastFrom = null; lastTo = null; bestFrom = null; bestTo = null; inCheck = null;
   currentTurn = 'w'; moveCount = 1; moveHistory = [];
+  capturedByWhite = []; capturedByBlack = [];
+  updateCaptures();
   document.getElementById('move-log').innerHTML = '<span style="color:var(--color-text-tertiary)">No moves yet</span>';
   document.getElementById('json-in').value = '';
   document.getElementById('json-err').textContent = '';
@@ -305,5 +329,81 @@ function resetBoard() {
   updateStatus();
 }
 
+// --- Pi polling ---
+
+let pollingActive = false;
+let lastFen = null;
+
+function renderBoard(fen) {
+  const newBoard = fenToBoard(fen);
+  // detect move: one square lost, one gained
+  const lost   = Object.keys(boardState).filter(sq => !newBoard[sq]);
+  const gained = Object.keys(newBoard).filter(sq => newBoard[sq] !== boardState[sq]);
+  if (lost.length === 1 && gained.length === 1) {
+    lastFrom = lost[0];
+    lastTo   = gained[0];
+    const captured = boardState[lastTo];
+    if (captured) {
+      if (captured[0] === 'b') capturedByWhite.push(captured);
+      else capturedByBlack.push(captured);
+      updateCaptures();
+    }
+    logMove(lastFrom, lastTo);
+  }
+  boardState = newBoard;
+  const turnPart = fen.split(' ')[1];
+  if (turnPart === 'w' || turnPart === 'b') currentTurn = turnPart;
+  buildBoard();
+  updateStatus();
+}
+
+function flashBoard(cls) {
+  const board = document.getElementById('board');
+  board.classList.add(cls);
+  board.addEventListener('animationend', () => board.classList.remove(cls), { once: true });
+}
+
+function showGameOver(reason) {
+  pollingActive = false;
+  const badge = document.getElementById('status-badge');
+  const label = reason ? reason.charAt(0).toUpperCase() + reason.slice(1) : 'Game over';
+  badge.textContent = 'Game over: ' + label;
+  badge.className = 'err';
+}
+
+async function pollState() {
+  try {
+    const res = await fetch('http://raspberrypi.local/state');
+    const msg = await res.json();
+    switch (msg.type) {
+      case 'fen':
+        if (msg.data !== lastFen) { lastFen = msg.data; renderBoard(msg.data); }
+        break;
+      case 'illegal_move':
+        flashBoard('flash-red');
+        break;
+      case 'check':
+        flashBoard('flash-yellow');
+        break;
+      case 'game_over':
+        showGameOver(msg.data);
+        break;
+      case 'new_game':
+        resetBoard();
+        lastFen = null;
+        pollingActive = true;
+        break;
+    }
+  } catch {
+    // Pi unreachable — silent fail, keep polling
+  }
+}
+
+function startPolling() {
+  pollingActive = true;
+  setInterval(() => { if (pollingActive) pollState(); }, 300);
+}
+
 // --- Init ---
 resetBoard();
+startPolling();

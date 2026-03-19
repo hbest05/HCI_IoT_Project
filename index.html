@@ -10,34 +10,41 @@
   <h1>IoT Chess Dashboard</h1>
 
   <div id="root">
-    <div id="board-wrap">
-      <div style="display:flex; gap:2px;">
-        <div id="rank-labels" class="coord-rank"></div>
-        <div id="board"></div>
+    <div id="board-col">
+      <div id="board-wrap">
+        <div id="captures-by-black" class="captures"></div>
+        <div style="display:flex; gap:2px;">
+          <div id="rank-labels" class="coord-rank"></div>
+          <div id="board"></div>
+        </div>
+        <div id="file-labels" class="coord-row" style="padding-left:22px;"></div>
+        <div id="captures-by-white" class="captures"></div>
       </div>
-      <div id="file-labels" class="coord-row" style="padding-left:22px;"></div>
-    </div>
 
-    <div id="panel">
-      <div class="panel-card">
-        <div class="panel-label">Device JSON input</div>
+      <div class="panel-card" id="manual-card">
+        <div class="panel-label">Manual Board Input</div>
         <textarea id="json-in" placeholder='{"e2":"wP","e4":""} or FEN string'></textarea>
         <div id="json-err"></div>
         <div class="btn-row">
           <button class="primary" onclick="applyJson()">Apply</button>
           <button onclick="loadExample()">Example move</button>
-          <button onclick="resetBoard()">Reset</button>
         </div>
         <div id="fen-out"></div>
       </div>
+    </div>
+
+    <div id="panel">
+      <div class="panel-card">
+        <button class="primary btn-full" onclick="resetBoard()">Reset game</button>
+      </div>
 
       <div class="panel-card">
-        <div class="panel-label">Game status</div>
+        <div class="panel-label">Turn</div>
         <span id="status-badge">—</span>
       </div>
 
       <div class="panel-card">
-        <div class="panel-label">Analysis</div>
+        <div class="panel-label">Best move</div>
         <div id="analysis-box"><span style="color:var(--color-text-tertiary)">Apply a position to analyse</span></div>
       </div>
 
