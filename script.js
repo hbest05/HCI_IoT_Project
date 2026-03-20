@@ -4,6 +4,9 @@ const PIECES = {
 };
 
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+const PI_BASE_URL = 'http://10.54.157.54:8000';
+const PI_FEN_ENDPOINT = PI_BASE_URL + '/fen';
+const PI_RESET_ENDPOINT = PI_BASE_URL + '/reset';
 const EXAMPLES = [
   '{"e2":"","e4":"wP"}',
   '{"e7":"","e5":"bP"}',
@@ -40,7 +43,9 @@ function updateCaptures() {
 // --- FEN helpers ---
 
 function fenToBoard(fen) {
-  const rows = fen.split(' ')[0].split('/');
+  const boardPart = String(fen || '').trim().split(/\s+/)[0];
+  const rows = boardPart.split('/');
+  if (rows.length !== 8) throw new Error('Invalid FEN board segment');
   const b = {};
   const files = 'abcdefgh';
   rows.forEach((row, ri) => {
@@ -86,7 +91,7 @@ function buildBoard() {
     for (let fi = 0; fi < 8; fi++) {
       const sq = files[fi] + rank;
       const div = document.createElement('div');
-      div.className = 'sq ' + ((fi + rank) % 2 === 1 ? 'light' : 'dark');
+      div.className = 'sq ' + ((fi + rank) % 2 === 0 ? 'light' : 'dark');
       div.id = 'sq-' + sq;
       const p = boardState[sq];
       if (p && PIECES[p]) {
@@ -316,7 +321,22 @@ function loadExample() {
   exampleStep++;
 }
 
-function resetBoard() {
+async function resetPiBoard() {
+  try {
+    await fetch(PI_RESET_ENDPOINT, { method: 'POST' });
+  } catch {
+    try {
+      await fetch(PI_RESET_ENDPOINT);
+    } catch {
+      // Pi unreachable - ignore and keep local reset behavior.
+    }
+  }
+}
+
+function resetBoard(options = {}) {
+  if (options.syncPi) {
+    void resetPiBoard();
+  }
   boardState = fenToBoard(START_FEN);
   lastFrom = null; lastTo = null; bestFrom = null; bestTo = null; inCheck = null;
   currentTurn = 'w'; moveCount = 1; moveHistory = [];
@@ -335,7 +355,8 @@ let pollingActive = false;
 let lastFen = null;
 
 function renderBoard(fen) {
-  const newBoard = fenToBoard(fen);
+  const normalizedFen = String(fen || '').trim();
+  const newBoard = fenToBoard(normalizedFen);
   // detect move: one square lost, one gained
   const lost   = Object.keys(boardState).filter(sq => !newBoard[sq]);
   const gained = Object.keys(newBoard).filter(sq => newBoard[sq] !== boardState[sq]);
@@ -351,7 +372,7 @@ function renderBoard(fen) {
     logMove(lastFrom, lastTo);
   }
   boardState = newBoard;
-  const turnPart = fen.split(' ')[1];
+  const turnPart = normalizedFen.split(/\s+/)[1];
   if (turnPart === 'w' || turnPart === 'b') currentTurn = turnPart;
   buildBoard();
   updateStatus();
@@ -373,11 +394,39 @@ function showGameOver(reason) {
 
 async function pollState() {
   try {
-    const res = await fetch('http://raspberrypi.local/state');
-    const msg = await res.json();
-    switch (msg.type) {
+    const res = await fetch(PI_FEN_ENDPOINT);
+    const rawBody = await res.text();
+    let payload = rawBody;
+    try {
+      payload = JSON.parse(rawBody);
+    } catch {
+      // Plain-text FEN is valid; keep raw string payload.
+    }
+
+    // Accept multiple payload formats:
+    // 1) { type: 'fen', data: '<fen>' }
+    // 2) { fen: '<fen>' }
+    // 3) '<fen>'
+    let type = null;
+    let data = null;
+
+    if (typeof payload === 'string') {
+      type = 'fen';
+      data = payload;
+    } else if (payload && typeof payload === 'object') {
+      if (typeof payload.type === 'string') type = payload.type;
+      if (typeof payload.data === 'string') data = payload.data;
+      if (type == null && typeof payload.fen === 'string') {
+        type = 'fen';
+        data = payload.fen;
+      }
+    }
+
+    switch (type) {
       case 'fen':
-        if (msg.data !== lastFen) { lastFen = msg.data; renderBoard(msg.data); }
+        if (!data) break;
+        data = data.trim();
+        if (data !== lastFen) { lastFen = data; renderBoard(data); }
         break;
       case 'illegal_move':
         flashBoard('flash-red');
@@ -386,7 +435,7 @@ async function pollState() {
         flashBoard('flash-yellow');
         break;
       case 'game_over':
-        showGameOver(msg.data);
+        showGameOver(data);
         break;
       case 'new_game':
         resetBoard();
